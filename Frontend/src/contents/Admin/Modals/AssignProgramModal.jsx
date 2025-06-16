@@ -107,10 +107,16 @@ function AssignProgramModal({ isOpen, onClose, instructor }) {
           const match = program.name.match(/Grade (\d+)/);
           const gradeLevel = match ? parseInt(match[1], 10) : null;
           
+          // Extract section name if it exists
+          const sectionMatch = program.name.match(/- ([^-]+)$/);
+          const sectionName = sectionMatch ? sectionMatch[1].trim() : null;
+          
           const formattedProgram = {
             id: p.id,
             yearLevels: gradeLevel ? [gradeLevel] : p.yearLevels.map(level => parseInt(level)),
-            programName: program?.name
+            programName: program?.name,
+            section: sectionName, // Include section name in the request
+            selectedYearLevel: p.yearLevels[0] // Add the selected year level
           };
           console.log('Formatted program:', formattedProgram);
           return formattedProgram;
@@ -124,6 +130,7 @@ function AssignProgramModal({ isOpen, onClose, instructor }) {
       });
 
       try {
+        // Use assignPrograms instead of assignProgram
         const response = await InstructorService.assignPrograms(instructor.id, formattedData.programs);
         console.log('Raw response from server:', response);
         
@@ -151,8 +158,31 @@ function AssignProgramModal({ isOpen, onClose, instructor }) {
         stack: error.stack
       });
       
-      // More specific error messages
-      if (error.response?.status === 422) {
+      // Check message content first, regardless of status code
+      if (error.response?.data?.message?.includes("already assigned")) {
+        const message = error.response.data.message;
+        // Get the program that caused the error
+        const failedProgram = selectedPrograms.find(p => {
+          const program = programs.find(prog => prog.id === p.id);
+          return message.includes(program?.name);
+        });
+
+        if (failedProgram) {
+          const program = programs.find(p => p.id === failedProgram.id);
+          const yearLevel = failedProgram.yearLevels[0];
+          
+          // Only show year level for Higher Education programs
+          const yearLevelText = (program.category === 'Higher Education' && yearLevel) 
+            ? ` for ${formatGradeLevelText(yearLevel, program.category)}` 
+            : '';
+            
+          toast.error(`Instructor is already assigned to ${program.name}${yearLevelText}`);
+        } else {
+          // Fallback if we can't find the specific program
+          const programName = message.match(/to (.+)$/)?.[1] || "the program";
+          toast.error(`Instructor is already assigned to ${programName}`);
+        }
+      } else if (error.response?.status === 422) {
         toast.error("Invalid data format. Please check your selections.");
       } else if (error.response?.status === 404) {
         toast.error("Instructor not found.");
