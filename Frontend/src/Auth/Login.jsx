@@ -36,6 +36,10 @@ function Login() {
     }
 
     if (token) {
+      // Prevent duplicate processing
+      if (localStorage.getItem("authToken")) {
+        return;
+      }
       localStorage.setItem("authToken", token);
       if (role) {
         localStorage.setItem("role", role);
@@ -62,6 +66,8 @@ function Login() {
           };
 
           toast.success("Successfully logged in!");
+          // Clean up URL to prevent re-processing
+          window.history.replaceState({}, document.title, "/login");
           navigate(dashboardRoutes[role] || "/", { replace: true });
         })
         .catch((error) => {

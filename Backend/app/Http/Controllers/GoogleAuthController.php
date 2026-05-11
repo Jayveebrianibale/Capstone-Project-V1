@@ -9,6 +9,7 @@ use App\Models\Instructor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Exception;
 
@@ -54,19 +55,15 @@ class GoogleAuthController extends Controller
 
             // All others unauthorized
             else {
-                return redirect("https://tpes.vercel.app/login?status=error&error_type=unauthorized&message=" . urlencode('Unauthorized email domain.'));
+                return redirect("http://localhost:5173/login?status=error&error_type=unauthorized&message=" . urlencode('Unauthorized email domain.'));
             }
 
             // Check if user exists
             $user = User::where('email', $email)->first();
 
-            // Check if user is already authorized with active tokens
-            if ($user && $user->tokens()->count() > 0) {
-                // Revoke existing tokens
+            // Revoke existing tokens if any - allow fresh login
+            if ($user) {
                 $user->tokens()->delete();
-                
-                // Return a structured response for the frontend
-                return redirect("https://tpes.vercel.app/login?status=already_authorized&message=" . urlencode('Previous session terminated. Please log in again.'));
             }
 
             if (!$user) {
@@ -109,9 +106,11 @@ class GoogleAuthController extends Controller
 
                 // Issue token and redirect with success status
                 $token = $user->createToken('authToken')->plainTextToken;
-                return redirect("https://tpes.vercel.app/login?status=success&token={$token}&role={$user->role}");
+                return redirect("http://localhost:5173/login?status=success&token={$token}&role={$user->role}");
 
             } catch (Exception $e) {
+                // Log full exception for debugging (will appear in storage/logs/laravel.log)
+                Log::error('GoogleAuthController exception', ['message' => $e->getMessage(), 'exception' => $e]);
                 // Enhanced error handling with frontend-friendly messages
                 $errorMessage = 'Authentication failed';
                 $errorType = 'general_error';
@@ -128,7 +127,7 @@ class GoogleAuthController extends Controller
                 }
 
                 // Redirect to frontend with error information
-                return redirect("https://tpes.vercel.app/login?status=error&error_type={$errorType}&message=" . urlencode($errorMessage));
+                return redirect("http://localhost:5173/login?status=error&error_type={$errorType}&message=" . urlencode($errorMessage));
             }
         }
 
