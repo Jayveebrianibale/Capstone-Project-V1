@@ -18,7 +18,7 @@ import BulkSendModal from "../../components/BulkSendModal";
 
 function SeniorHigh() {
   const [activeTab, setActiveTab] = useState(0);
-  const [mergedInstructorsByGrade, setMergedInstructorsByGrade] = useState([[], []]); // For grades 11-12
+  const [mergedInstructorsByGrade, setMergedInstructorsByGrade] = useState([]);
   const [noInstructors, setNoInstructors] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [bulkSending, setBulkSending] = useState(false);
@@ -33,13 +33,38 @@ function SeniorHigh() {
     semester: '',
     searchQuery: ''
   });
+  const [gradeLevels, setGradeLevels] = useState([]);
+  const [tabLabels, setTabLabels] = useState([]);
 
-  const tabLabels = ["Grade 11", "Grade 12"];
   const programCode = "SHS";
   const { loading, setLoading } = useLoading();
 
   const schoolYearOptions = EvaluationFilterService.getSchoolYearOptions();
   const semesterOptions = EvaluationFilterService.getSemesterOptions();
+
+  useEffect(() => {
+    const fetchGradeLevels = async () => {
+      try {
+        const levels = await ProgramService.getYearLevelsByCode(programCode);
+        const sorted = levels
+          .map(l => parseInt(l, 10))
+          .filter(n => !isNaN(n))
+          .sort((a, b) => a - b);
+        setGradeLevels(sorted);
+        setTabLabels(sorted.map(l => `Grade ${l}`));
+        setMergedInstructorsByGrade(new Array(sorted.length).fill([]));
+      } catch (error) {
+        console.error("Error fetching grade levels:", error);
+        setGradeLevels([]);
+        setTabLabels([]);
+      }
+    };
+    fetchGradeLevels();
+  }, [programCode]);
+
+  useEffect(() => {
+    fetchSections();
+  }, [activeTab]);
 
   const handleFilterChange = (filterType, value) => {
     setFilters(prev => ({
@@ -144,7 +169,7 @@ function SeniorHigh() {
       }
 
       const groupByGrade = (data) => {
-        const grouped = [[], []]; // [Grade 11, Grade 12]
+        const grouped = gradeLevels.map(() => []);
         
         data.forEach((item) => {
           if (!item || !item.pivot || !Array.isArray(item.pivot.assignments)) {
@@ -160,18 +185,21 @@ function SeniorHigh() {
               assignment: JSON.stringify(assignment, null, 2)
             });
             
-            if (isNaN(yearLevel) || yearLevel < 11 || yearLevel > 12) {
+            if (isNaN(yearLevel)) {
               console.log(`Invalid year level for instructor ${item.name}:`, {
                 yearLevel,
                 rawYearLevel: assignment.yearLevel,
-                isNaN: isNaN(yearLevel),
-                lessThan11: yearLevel < 11,
-                greaterThan12: yearLevel > 12
+                isNaN: isNaN(yearLevel)
               });
               return;
             }
 
-            // Create instructor object for this assignment
+            const gradeIndex = gradeLevels.indexOf(yearLevel);
+            if (gradeIndex === -1) {
+              console.log(`Year level ${yearLevel} not in active grade levels for instructor ${item.name}`);
+              return;
+            }
+
             const instructor = {
               id: item.id,
               name: item.name,
@@ -202,13 +230,7 @@ function SeniorHigh() {
               overallRating: item.overallRating || 0
             };
 
-            // Place in correct group based on actual year number
-            if (yearLevel === 11) {
-              grouped[0].push(instructor);
-            }
-            else if (yearLevel === 12) {
-              grouped[1].push(instructor);
-            }
+            grouped[gradeIndex].push(instructor);
           });
         });
 
@@ -266,8 +288,10 @@ function SeniorHigh() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [programCode, filters.schoolYear, filters.semester]);
+    if (gradeLevels.length > 0) {
+      fetchData();
+    }
+  }, [programCode, filters.schoolYear, filters.semester, gradeLevels]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -299,7 +323,7 @@ function SeniorHigh() {
     return mergedInstructorsByGrade.some((gradeGroup) => gradeGroup.length > 0);
   };
 
-  const filteredInstructors = mergedInstructorsByGrade[activeTab].filter(instructor => {
+  const filteredInstructors = (mergedInstructorsByGrade[activeTab] || []).filter(instructor => {
     // For all grade levels, filter by section if sections exist
     if (sections.length > 0) {
       // Extract section from program name
@@ -333,79 +357,103 @@ function SeniorHigh() {
           />
 
           <div className="flex justify-between items-center mb-4">
-            <Tabs tabs={tabLabels} activeTab={activeTab} setActiveTab={setActiveTab} />
-            <button
-              onClick={() => handleManageSections(activeTab + 11)}
-              className="px-4 py-2 bg-[#1F3463] text-white rounded-lg hover:bg-[#172a4d] flex items-center gap-2"
-            >
-              <FaPlus className="w-4 h-4" />
-              Manage Sections
-            </button>
-          </div>
-
-          {/* Section Tabs for all Grades */}
-          <div className="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 mb-4">
-            {sections.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sections.map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => setActiveSection(section.name)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeSection === section.name
-                        ? "bg-[#1F3463] text-white"
-                        : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
-                    }`}
-                  >
-                    {section.name}
-                  </button>
-                ))}
-              </div>
+            {tabLabels.length > 0 ? (
+              <Tabs tabs={tabLabels} activeTab={activeTab} setActiveTab={setActiveTab} />
             ) : (
-              <div className="flex flex-col items-center justify-center py-6">
-                <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
-                  <UserX className="w-8 h-8 text-gray-500 dark:text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  No Sections Available
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-center mb-4">
-                  {`No sections are currently set up for ${tabLabels[activeTab]}.`}
-                </p>
-                <button
-                  onClick={() => handleManageSections(activeTab + 11)}
-                  className="px-4 py-2 bg-[#1F3463] text-white rounded-lg hover:bg-[#172a4d] flex items-center gap-2"
-                >
-                  <FaPlus className="w-4 h-4" />
-                  Add Section
-                </button>
+              <div className="text-gray-500 dark:text-gray-400 text-sm">
+                No Grade Levels Available
               </div>
+            )}
+            {tabLabels.length > 0 && (
+              <button
+                onClick={() => handleManageSections(gradeLevels[activeTab])}
+                className="px-4 py-2 bg-[#1F3463] text-white rounded-lg hover:bg-[#172a4d] flex items-center gap-2"
+              >
+                <FaPlus className="w-4 h-4" />
+                Manage Sections
+              </button>
             )}
           </div>
 
-          <div className="mt-4 text-center">
-            {sections.length > 0 ? (
-              hasInstructorsForGrade(activeTab) && filteredInstructors.length > 0 ? (
-                <InstructorTable 
-                  instructors={filteredInstructors} 
-                  gradeLevel={activeTab + 11}
-                  category="Senior High"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 px-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
-                    <UserX className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+          {tabLabels.length > 0 ? (
+            <>
+              {/* Section Tabs for all Grades */}
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 mb-4">
+                {sections.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {sections.map((section) => (
+                      <button
+                        key={section.id}
+                        onClick={() => setActiveSection(section.name)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          activeSection === section.name
+                            ? "bg-[#1F3463] text-white"
+                            : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
+                        }`}
+                      >
+                        {section.name}
+                      </button>
+                    ))}
                   </div>
-                  <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    No Instructors in Section
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-center">
-                    {`No instructors are currently assigned to ${activeSection} for ${tabLabels[activeTab]}.`}
-                  </p>
-                </div>
-              )
-            ) : null}
-          </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6">
+                    <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
+                      <UserX className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      No Sections Available
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-center mb-4">
+                      {`No sections are currently set up for ${tabLabels[activeTab]}.`}
+                    </p>
+                    <button
+                      onClick={() => handleManageSections(gradeLevels[activeTab])}
+                      className="px-4 py-2 bg-[#1F3463] text-white rounded-lg hover:bg-[#172a4d] flex items-center gap-2"
+                    >
+                      <FaPlus className="w-4 h-4" />
+                      Add Section
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 text-center">
+                {sections.length > 0 ? (
+                  hasInstructorsForGrade(activeTab) && filteredInstructors.length > 0 ? (
+                    <InstructorTable 
+                      instructors={filteredInstructors} 
+                      gradeLevel={gradeLevels[activeTab]}
+                      category="Senior High"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
+                        <UserX className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        No Instructors in Section
+                      </h3>
+                      <p className="text-gray-500 dark:text-gray-400 text-center">
+                        {`No instructors are currently assigned to ${activeSection} for ${tabLabels[activeTab]}.`}
+                      </p>
+                    </div>
+                  )
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
+                <Users className="w-12 h-12 text-gray-500 dark:text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                No Grade Levels Created
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 text-center max-w-md">
+                No grade levels have been set up for Senior High yet. Add grade levels in the Programs page to see instructors here.
+              </p>
+            </div>
+          )}
         </>
       )}
 

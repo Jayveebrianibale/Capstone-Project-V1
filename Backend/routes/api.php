@@ -93,6 +93,7 @@ Route::delete('/programs/{id}', [ProgramController::class, 'destroy']);
 Route::get('/instructors/program/{id}', [InstructorController::class, 'getByProgram']);
 Route::get('/programs/{code}/instructors', [ProgramController::class, 'getInstructorsByProgramCode']);
 Route::get('/programs/{program}/year-levels', [ProgramController::class, 'getYearLevels']);
+Route::get('/programs/levels/{code}', [ProgramController::class, 'getYearLevelsByCode']);
 Route::get('/programs/code/{code}/grade/{gradeLevel}', [ProgramController::class, 'getByCodeAndGrade']);
 
 // Level Routes

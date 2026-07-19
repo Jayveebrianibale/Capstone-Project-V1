@@ -74,6 +74,11 @@ const ProgramService = {
       throw error;
     }
   },
+
+  getYearLevelsByCode: async (code) => {
+    const response = await api.get(`/programs/levels/${code}`);
+    return response.data;
+  },
 };
 
 export default ProgramService;

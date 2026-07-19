@@ -305,8 +305,8 @@ public function bulkUpload(Request $request) {
             })->get();
             
             if ($programs->isEmpty()) {
-                \Log::error("No programs found for code: " . $programCode);
-                return response()->json(['error' => 'Program not found'], 404);
+                \Log::info("No programs found for code: " . $programCode);
+                return response()->json([]);
             }
 
             $programIds = $programs->pluck('id');
@@ -458,7 +458,24 @@ public function bulkUpload(Request $request) {
     }
 
     public function getFilteredInstructorResultsByProgram($code, Request $request) {
-        $program = Program::where('code', $code)->firstOrFail();
+        $program = Program::where(function($query) use ($code) {
+            $query->where('code', $code)
+                  ->orWhere(function($q) use ($code) {
+                      if ($code === 'INT') {
+                          $q->where('code', 'Intermediate');
+                      } else if ($code === 'Intermediate') {
+                          $q->where('code', 'INT');
+                      } else if ($code === 'JHS') {
+                          $q->where('code', 'Junior High');
+                      } else if ($code === 'Junior High') {
+                          $q->where('code', 'JHS');
+                      } else if ($code === 'SHS') {
+                          $q->where('code', 'Senior High');
+                      } else if ($code === 'Senior High') {
+                          $q->where('code', 'SHS');
+                      }
+                  });
+        })->firstOrFail();
 
         // Get all instructors assigned to this program
         $instructors = $program->instructors()
@@ -534,6 +551,42 @@ public function bulkUpload(Request $request) {
         });
 
         return response()->json($results);
+    }
+
+    public function getYearLevelsByCode($code)
+    {
+        $programs = Program::where(function($query) use ($code) {
+            $query->where('code', $code)
+                  ->orWhere(function($q) use ($code) {
+                      if ($code === 'INT') {
+                          $q->where('code', 'Intermediate');
+                      } else if ($code === 'Intermediate') {
+                          $q->where('code', 'INT');
+                      } else if ($code === 'JHS') {
+                          $q->where('code', 'Junior High');
+                      } else if ($code === 'Junior High') {
+                          $q->where('code', 'JHS');
+                      } else if ($code === 'SHS') {
+                          $q->where('code', 'Senior High');
+                      } else if ($code === 'Senior High') {
+                          $q->where('code', 'SHS');
+                      }
+                  });
+        })->get(['yearLevel']);
+
+        $levels = $programs->pluck('yearLevel')
+            ->filter()
+            ->unique()
+            ->map(function($level) {
+                $number = preg_replace('/[^0-9]/', '', $level);
+                return $number !== '' ? (int)$number : null;
+            })
+            ->filter()
+            ->sort()
+            ->values()
+            ->all();
+
+        return response()->json($levels);
     }
 
     public function getByCodeAndGrade($code, $gradeLevel)

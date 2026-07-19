@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { toast } from "react-toastify";
 import { Loader2 } from 'lucide-react';
+import ProgramService from "../../../services/ProgramService";
 
 export default function JuniorHighModal({ isOpen, onClose, onSave, isEditing, program }) {
   const [formData, setFormData] = useState({
@@ -12,17 +13,14 @@ export default function JuniorHighModal({ isOpen, onClose, onSave, isEditing, pr
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [gradeLevelOptions, setGradeLevelOptions] = useState([]);
 
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
-      // Simulate loading state for better UX
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-
+      fetchGradeLevels();
+      
       if (isEditing && program) {
-        // Parse existing data from program name
         const [gradeLevel, section] = program.name.split(' - ');
         setFormData({
           gradeLevel: gradeLevel.trim(),
@@ -35,9 +33,32 @@ export default function JuniorHighModal({ isOpen, onClose, onSave, isEditing, pr
         });
       }
 
-      return () => clearTimeout(timer);
+      return () => {};
     }
   }, [isOpen, isEditing, program]);
+
+  const fetchGradeLevels = async () => {
+    try {
+      const levels = await ProgramService.getYearLevelsByCode("JHS");
+      const sorted = levels
+        .map(l => parseInt(l, 10))
+        .filter(n => !isNaN(n))
+        .sort((a, b) => a - b);
+      const options = sorted.map(l => `Grade ${l}`);
+      setGradeLevelOptions(options);
+      if (options.length > 0 && !formData.gradeLevel) {
+        setFormData(prev => ({ ...prev, gradeLevel: options[0] }));
+      }
+    } catch (error) {
+      console.error("Error fetching grade levels:", error);
+      setGradeLevelOptions(["Grade 7", "Grade 8", "Grade 9", "Grade 10"]);
+    } finally {
+      const timer = setTimeout(() => {
+        setIsLoading(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  };
 
   const handleGradeLevelChange = (value) => {
     setFormData(prev => ({
@@ -167,10 +188,9 @@ export default function JuniorHighModal({ isOpen, onClose, onSave, isEditing, pr
                   required
                 >
                   <option value="">Select grade level</option>
-                  <option value="Grade 7">Grade 7</option>
-                  <option value="Grade 8">Grade 8</option>
-                  <option value="Grade 9">Grade 9</option>
-                  <option value="Grade 10">Grade 10</option>
+                  {gradeLevelOptions.map((grade) => (
+                    <option key={grade} value={grade}>{grade}</option>
+                  ))}
                 </select>
               </div>
 
